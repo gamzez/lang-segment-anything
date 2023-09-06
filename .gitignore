@@ -29,6 +29,8 @@ share/python-wheels/
 MANIFEST
 *.jpg
 *.png
+*.jpg
+*.png
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -130,6 +132,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+#DS_store
+*.DS_store
 
 #DS_store
 *.DS_store

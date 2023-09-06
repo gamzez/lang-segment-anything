@@ -4,6 +4,10 @@ import torch
 from PIL import Image
 from torchvision.utils import draw_bounding_boxes
 from torchvision.utils import draw_segmentation_masks
+import matplotlib.pyplot as plt
+import warnings
+import requests
+from lang_sam import LangSAM
 
 MIN_AREA = 100
 
@@ -86,3 +90,79 @@ def generate_labelme_json(binary_masks, labels, image_size, image_path=None):
             json_dict["shapes"].append(shape_dict)
 
     return json_dict
+
+def display_coins_with_boxes(image, boxes, labels, classes):
+    fig, ax = plt.subplots()
+    ax.imshow(image)
+    ax.set_title("Image with Bounding Boxes")
+    ax.axis('off')
+
+    for box, label in zip(boxes, labels):
+        x_min, y_min, x_max, y_max = box
+        #label = round(label.item(), 2)  # Convert logit to a scalar before rounding
+        coin_type = classes[label]
+        box_width = x_max - x_min
+        box_height = y_max - y_min
+
+        # Draw bounding box
+        rect = plt.Rectangle((x_min, y_min), box_width, box_height, fill=False, edgecolor='red', linewidth=2)
+        ax.add_patch(rect)
+
+        # Add confidence score as text
+        ax.text(x_min, y_min, f"{coin_type}", fontsize=8, color='red', verticalalignment='top')
+
+    plt.show()
+
+def find_coin_masks(image):
+    # Suppress warning messages
+    warnings.filterwarnings("ignore")
+    text_prompt = "coin"
+    try:
+        model = LangSAM()
+        masks, boxes, phrases, logits = model.predict(image, text_prompt)
+
+        if len(masks) == 0:
+            print(f"No objects of the '{text_prompt}' prompt detected in the image.")
+        else:
+            # Convert masks to numpy arrays
+            masks_np = [mask.squeeze().cpu().numpy() for mask in masks]
+            boxes_np = [box.squeeze().cpu().numpy() for box in boxes]
+            return masks_np, boxes_np
+
+    except (requests.exceptions.RequestException, IOError) as e:
+        print(f"Error: {e}")
+
+    
+# returns y_min, y_max, x_min, x_max
+def find_boundary_of_coin(nonzero_indices):
+    return nonzero_indices[0,:].min(), nonzero_indices[0,:].max(), nonzero_indices[1,:].min(), nonzero_indices[1,:].max()
+
+
+
+def generate_coin_images(image_dir):
+    image = Image.open(image_dir).convert("RGB")
+    masks, boxes = find_coin_masks(image)
+    image = np.array(image)
+    coins = []
+    for index in range(len(masks)):
+        mask = np.broadcast_to(np.expand_dims(masks[index],-1), image.shape)
+        masked_image = mask * image
+        nonzero_indices = np.nonzero(masked_image[:,:,0])
+        nonzero_indices = np.array(nonzero_indices)
+        y_min, y_max, x_min, x_max = find_boundary_of_coin(nonzero_indices)
+        masked_image = masked_image[y_min:y_max,x_min:x_max]
+        if (y_max - y_min)<500 and (x_max - x_min)<500:
+            difference_y = 500 - (y_max - y_min)
+            difference_x = 500 - (x_max - x_min)
+            if difference_y != 0:
+                if difference_y % 2 == 0:
+                    masked_image = np.pad(masked_image, [(difference_y//2, difference_y//2), (0, 0), (0, 0)])
+                else:
+                    masked_image = np.pad(masked_image, [((difference_y-1)//2, (difference_y-1)//2 + 1), (0, 0), (0, 0)])
+            if difference_x != 0:
+                if difference_x % 2 == 0:
+                    masked_image = np.pad(masked_image, [(0, 0), (difference_x//2, difference_x//2), (0, 0)])
+                else:
+                    masked_image = np.pad(masked_image, [(0, 0), ((difference_x-1)//2, (difference_x-1)//2 + 1), (0, 0)])
+            coins.append(masked_image)
+    return coins, boxes
