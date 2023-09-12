@@ -119,7 +119,7 @@ def find_coin_masks(image):
     text_prompt = "coin"
     try:
         model = LangSAM()
-        masks, boxes, phrases, logits = model.predict(image, text_prompt)
+        masks, boxes, _, _ = model.predict(image, text_prompt)
 
         if len(masks) == 0:
             print(f"No objects of the '{text_prompt}' prompt detected in the image.")
@@ -150,7 +150,7 @@ def generate_coin_images(image_dir):
         nonzero_indices = np.nonzero(masked_image[:,:,0])
         nonzero_indices = np.array(nonzero_indices)
         y_min, y_max, x_min, x_max = find_boundary_of_coin(nonzero_indices)
-        masked_image = masked_image[y_min:y_max,x_min:x_max]
+        masked_image = masked_image[y_min:y_max,x_min:x_max]  #crop
         if (y_max - y_min)<500 and (x_max - x_min)<500:
             difference_y = 500 - (y_max - y_min)
             difference_x = 500 - (x_max - x_min)
@@ -165,4 +165,12 @@ def generate_coin_images(image_dir):
                 else:
                     masked_image = np.pad(masked_image, [(0, 0), ((difference_x-1)//2, (difference_x-1)//2 + 1), (0, 0)])
             coins.append(masked_image)
+        else:
+            #random_scaling_factor = 500 / max(masked_image.shape[0], masked_image.shape[1])
+            #width = int(masked_image.shape[1] * random_scaling_factor)
+            #height = int(masked_image.shape[0] * random_scaling_factor)
+            dim = (500, 500)
+            resized_masked_image = cv2.resize(masked_image, dim, interpolation = cv2.INTER_AREA)
+            coins.append(resized_masked_image)
+
     return coins, boxes
